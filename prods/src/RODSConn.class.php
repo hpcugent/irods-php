@@ -22,18 +22,18 @@ if (!defined("O_TRUNC"))
 class RODSConn {
 
     private $conn;     // (resource) socket connection to RODS server
-    private $account;  // RODS user account  
+    private $account;  // RODS user account
     private $idle;
     private $id;
     public $connected;
 
     /**
-     * Makes a new connection to RODS server, with supplied user information (name, passwd etc.) 
-     * @param string $host hostname 
-     * @param string $port port number 
-     * @param string $user username 
-     * @param string $pass passwd 
-     * @param string $zone zonename 
+     * Makes a new connection to RODS server, with supplied user information (name, passwd etc.)
+     * @param string $host hostname
+     * @param string $port port number
+     * @param string $user username
+     * @param string $pass passwd
+     * @param string $zone zonename
      */
     public function __construct(RODSAccount &$account) {
         $this->account = $account;
@@ -87,35 +87,31 @@ class RODSConn {
         $zone = $this->account->zone;
         $auth_type = $this->account->auth_type;
 
-        // if we're going to use PAM, set up the socket context 
-        // options for SSL connections when we open the connection
-        if (strcasecmp($auth_type, "PAM") == 0) {
-            $ssl_opts = array('ssl' => array());
-            if (array_key_exists('ssl', $GLOBALS['PRODS_CONFIG'])) {
-                $ssl_conf = $GLOBALS['PRODS_CONFIG']['ssl'];
-                if (array_key_exists('verify_peer', $ssl_conf)) {
-                    if (strcasecmp("true", $ssl_conf['verify_peer']) == 0) {
-                        $ssl_opts['ssl']['verify_peer'] = true;
-                    }
-                }
-                if (array_key_exists('allow_self_signed', $ssl_conf)) {
-                    if (strcasecmp("true", $ssl_conf['allow_self_signed']) == 0) {
-                        $ssl_opts['ssl']['allow_self_signed'] = true;
-                    }
-                }
-                if (array_key_exists('cafile', $ssl_conf)) {
-                    $ssl_opts['ssl']['cafile'] = $ssl_conf['cafile'];
-                }
-                if (array_key_exists('capath', $ssl_conf)) {
-                    $ssl_opts['ssl']['capath'] = $ssl_conf['capath'];
+        // Set options for SSL connections when we open the connection
+        $ssl_opts = array('ssl' => array());
+        if (array_key_exists('ssl', $GLOBALS['PRODS_CONFIG'])) {
+            $ssl_conf = $GLOBALS['PRODS_CONFIG']['ssl'];
+            if (array_key_exists('verify_peer', $ssl_conf)) {
+                if (strcasecmp("true", $ssl_conf['verify_peer']) == 0) {
+                    $ssl_opts['ssl']['verify_peer'] = true;
                 }
             }
-            $ssl_ctx = stream_context_get_default($ssl_opts);
-            $sock_timeout = ini_get("default_socket_timeout");
-            $conn = @stream_socket_client("tcp://$host:$port", $errno, $errstr, $sock_timeout, STREAM_CLIENT_CONNECT, $ssl_ctx);
-        } else {
-            $conn = @fsockopen($host, $port, $errno, $errstr);
+            if (array_key_exists('allow_self_signed', $ssl_conf)) {
+                if (strcasecmp("true", $ssl_conf['allow_self_signed']) == 0) {
+                    $ssl_opts['ssl']['allow_self_signed'] = true;
+                }
+            }
+            if (array_key_exists('cafile', $ssl_conf)) {
+                $ssl_opts['ssl']['cafile'] = $ssl_conf['cafile'];
+            }
+            if (array_key_exists('capath', $ssl_conf)) {
+                $ssl_opts['ssl']['capath'] = $ssl_conf['capath'];
+            }
         }
+        $ssl_ctx = stream_context_get_default($ssl_opts);
+        $sock_timeout = ini_get("default_socket_timeout");
+        $conn = @stream_socket_client("tcp://$host:$port", $errno, $errstr, $sock_timeout, STREAM_CLIENT_CONNECT, $ssl_ctx);
+
         if (!$conn)
             throw new RODSException("Connection to '$host:$port' failed.1: ($errno)$errstr. ", "SYS_SOCK_OPEN_ERR");
         $this->conn = $conn;
@@ -145,7 +141,7 @@ class RODSConn {
 // TSM Feb 2016: changed crypto method from TLS_CLIENT to SSLv23_CLIENT  because iRODS4.1 expects at least TLS1.2
 //               in PHP 5.4 the TLS_CLIENT will NOT negotiate TLS 1.2 where SSLv23 does so.
 //               see https://bugs.php.net/bug.php?id=65329
- 
+
             if (!stream_socket_enable_crypto($conn, true, STREAM_CRYPTO_METHOD_SSLv23_CLIENT)) {
                 throw new RODSException("Error turning on SSL on connection to server '$host:$port'.");
             }
@@ -995,7 +991,7 @@ class RODSConn {
      * @return the read string.
      */
     public function fileRead($l1desc, $length) {
-       
+
         $openedDataObjInp = new RP_OpenedDataObjInp($l1desc, $length);
         $msg = new RODSMessage("RODS_API_REQ_T", $openedDataObjInp, $GLOBALS['PRODS_API_NUMS']['OPENED_DATA_OBJ_READ_AN'], $string);
 
@@ -1046,8 +1042,8 @@ class RODSConn {
     public function fileSeek($l1desc, $offset, $whence = SEEK_SET) {
       //  $dataObjReadInp_pk = new RP_fileLseekInp($l1desc, $offset, $whence);
        // $msg = new RODSMessage("RODS_API_REQ_T", $dataObjReadInp_pk, $GLOBALS['PRODS_API_NUMS']['DATA_OBJ_LSEEK_AN']);
-        
-        
+
+
         $openedDataObjInp = new RP_OpenedDataObjInp($l1desc, 0, $offset, $whence);
         $msg = new RODSMessage("RODS_API_REQ_T", $openedDataObjInp, $GLOBALS['PRODS_API_NUMS']['OPENED_DATA_OBJ_SEEK_AN'], $string);
 
