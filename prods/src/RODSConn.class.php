@@ -126,26 +126,27 @@ class RODSConn {
             throw new RODSException("Connection to '$host:$port' failed.2. User: $user Zone: $zone", $GLOBALS['PRODS_ERR_CODES_REV']["$intInfo"]);
         }
 
-        // are we doing PAM authentication
-        if (strcasecmp($auth_type, "PAM") == 0) {
-            // Ask server to turn on SSL
-            $req_packet = new RP_sslStartInp();
-            $msg = new RODSMessage("RODS_API_REQ_T", $req_packet, $GLOBALS['PRODS_API_NUMS']['SSL_START_AN']);
-            fwrite($conn, $msg->pack());
-            $msg = new RODSMessage();
-            $intInfo = $msg->unpack($conn);
-            if ($intInfo < 0) {
-                throw new RODSException("Connection to '$host:$port' failed.ssl1. User: $user Zone: $zone", $GLOBALS['PRODS_ERR_CODES_REV']["$intInfo"]);
-            }
-            // Turn on SSL on our side
+        // Ask server to turn on SSL
+        $req_packet = new RP_sslStartInp();
+        $msg = new RODSMessage("RODS_API_REQ_T", $req_packet, $GLOBALS['PRODS_API_NUMS']['SSL_START_AN']);
+        fwrite($conn, $msg->pack());
+        $msg = new RODSMessage();
+        $intInfo = $msg->unpack($conn);
+        if ($intInfo < 0) {
+            throw new RODSException("Connection to '$host:$port' failed.ssl1. User: $user Zone: $zone", $GLOBALS['PRODS_ERR_CODES_REV']["$intInfo"]);
+        }
+        // Turn on SSL on our side
 // TSM Feb 2016: changed crypto method from TLS_CLIENT to SSLv23_CLIENT  because iRODS4.1 expects at least TLS1.2
 //               in PHP 5.4 the TLS_CLIENT will NOT negotiate TLS 1.2 where SSLv23 does so.
 //               see https://bugs.php.net/bug.php?id=65329
 
-            if (!stream_socket_enable_crypto($conn, true, STREAM_CRYPTO_METHOD_SSLv23_CLIENT)) {
-                throw new RODSException("Error turning on SSL on connection to server '$host:$port'.");
-            }
+        if (!stream_socket_enable_crypto($conn, true, STREAM_CRYPTO_METHOD_SSLv23_CLIENT)) {
+            throw new RODSException("Error turning on SSL on connection to server '$host:$port'.");
+        }
 
+
+        // are we doing PAM authentication
+        if (strcasecmp($auth_type, "PAM") == 0) {
             // all good ... do the PAM authentication over the encrypted connection
 
             // FIXME: '24', the TTL in hours, should be a configuration option.
@@ -163,36 +164,6 @@ class RODSConn {
             // and set the auth_type to irods for this connection
             $pack = $msg->getBody();
             $pass = $this->account->pass = $pack->irodsPamPassword;
-
-            // Done authentication ... turn ask the server to turn off SSL
-            $req_packet = new RP_sslEndInp();
-            $msg = new RODSMessage("RODS_API_REQ_T", $req_packet, $GLOBALS['PRODS_API_NUMS']['SSL_END_AN']);
-            fwrite($conn, $msg->pack());
-            $msg = new RODSMessage();
-            $intInfo = $msg->unpack($conn);
-            if ($intInfo < 0) {
-                throw new RODSException("Connection to '$host:$port' failed.ssl2. User: $user Zone: $zone", $GLOBALS['PRODS_ERR_CODES_REV']["$intInfo"]);
-            }
-            // De-activate SSL on the connection
-            stream_socket_enable_crypto($conn, false);
-
-            // CJS: For whatever reason some trash is left over for us
-            // to read after the SSL shutdown.
-            // We need to read and discard those bytes so they don't
-            // get in the way of future API responses.
-            //
-            // There used to be a while(select() > 0){fread(1)} loop
-            // here, but that proved to be unreliable, most likely
-            // because sometimes not all trash bytes have yet been
-            // received at that point. This caused PAM logins to fail
-            // randomly.
-            //
-            // The following fread() call reads all remaining bytes in
-            // the current packet (or so it seems).
-            //
-            // Testing shows there's always exactly 31 bytes to read.
-
-            fread($conn, 1024);
         }
 
         // request authentication
@@ -248,6 +219,37 @@ class RODSConn {
                 throw new RODSException('Cannot set session ticket.', $GLOBALS['PRODS_ERR_CODES_REV']["$intInfo"]);
             }
         }
+
+
+        // Done authentication ... turn ask the server to turn off SSL
+        $req_packet = new RP_sslEndInp();
+        $msg = new RODSMessage("RODS_API_REQ_T", $req_packet, $GLOBALS['PRODS_API_NUMS']['SSL_END_AN']);
+        fwrite($conn, $msg->pack());
+        $msg = new RODSMessage();
+        $intInfo = $msg->unpack($conn);
+        if ($intInfo < 0) {
+            throw new RODSException("Connection to '$host:$port' failed.ssl2. User: $user Zone: $zone", $GLOBALS['PRODS_ERR_CODES_REV']["$intInfo"]);
+        }
+        // De-activate SSL on the connection
+        stream_socket_enable_crypto($conn, false);
+
+        // CJS: For whatever reason some trash is left over for us
+        // to read after the SSL shutdown.
+        // We need to read and discard those bytes so they don't
+        // get in the way of future API responses.
+        //
+        // There used to be a while(select() > 0){fread(1)} loop
+        // here, but that proved to be unreliable, most likely
+        // because sometimes not all trash bytes have yet been
+        // received at that point. This caused PAM logins to fail
+        // randomly.
+        //
+        // The following fread() call reads all remaining bytes in
+        // the current packet (or so it seems).
+        //
+        // Testing shows there's always exactly 31 bytes to read.
+
+        fread($conn, 1024);
     }
 
     /**
