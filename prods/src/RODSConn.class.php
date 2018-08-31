@@ -8,7 +8,6 @@
  */
 require_once("autoload.inc.php");
 require_once("RodsAPINum.inc.php");
-require_once("RodsErrorTable.inc.php");
 require_once("RodsConst.inc.php");
 
 if (!defined("O_RDONLY"))
@@ -23,18 +22,18 @@ if (!defined("O_TRUNC"))
 class RODSConn {
 
     private $conn;     // (resource) socket connection to RODS server
-    private $account;  // RODS user account
+    private $account;  // RODS user account  
     private $idle;
     private $id;
     public $connected;
 
     /**
-     * Makes a new connection to RODS server, with supplied user information (name, passwd etc.)
-     * @param string $host hostname
-     * @param string $port port number
-     * @param string $user username
-     * @param string $pass passwd
-     * @param string $zone zonename
+     * Makes a new connection to RODS server, with supplied user information (name, passwd etc.) 
+     * @param string $host hostname 
+     * @param string $port port number 
+     * @param string $user username 
+     * @param string $pass passwd 
+     * @param string $zone zonename 
      */
     public function __construct(RODSAccount &$account) {
         $this->account = $account;
@@ -84,12 +83,11 @@ class RODSConn {
         $host = $this->account->host;
         $port = $this->account->port;
         $user = $this->account->user;
-        $proxy_user = $this->account->proxy_user;
         $pass = $this->account->pass;
         $zone = $this->account->zone;
         $auth_type = $this->account->auth_type;
 
-        // if we're going to use PAM, set up the socket context
+        // if we're going to use PAM, set up the socket context 
         // options for SSL connections when we open the connection
         if (strcasecmp($auth_type, "PAM") == 0) {
             $ssl_opts = array('ssl' => array());
@@ -123,13 +121,13 @@ class RODSConn {
         $this->conn = $conn;
 
         // connect to RODS server
-        $msg = RODSMessage::packConnectMsg($user, $proxy_user, $zone);
+        $msg = RODSMessage::packConnectMsg($user, $zone);
         fwrite($conn, $msg);
 
         $msg = new RODSMessage();
         $intInfo = $msg->unpack($conn);
         if ($intInfo < 0) {
-            throw new RODSException("Connection to '$host:$port' failed.2. User: $proxy_user Zone: $zone", $GLOBALS['PRODS_ERR_CODES_REV']["$intInfo"]);
+            throw new RODSException("Connection to '$host:$port' failed.2. User: $user Zone: $zone", $GLOBALS['PRODS_ERR_CODES_REV']["$intInfo"]);
         }
 
         // are we doing PAM authentication
@@ -141,27 +139,28 @@ class RODSConn {
             $msg = new RODSMessage();
             $intInfo = $msg->unpack($conn);
             if ($intInfo < 0) {
-                throw new RODSException("Connection to '$host:$port' failed.ssl1. User: $proxy_user Zone: $zone", $GLOBALS['PRODS_ERR_CODES_REV']["$intInfo"]);
+                throw new RODSException("Connection to '$host:$port' failed.ssl1. User: $user Zone: $zone", $GLOBALS['PRODS_ERR_CODES_REV']["$intInfo"]);
             }
             // Turn on SSL on our side
-            // TSM Feb 2016: changed crypto method from TLS_CLIENT to SSLv23_CLIENT  because iRODS4.1 expects at least TLS1.2
-            //               in PHP 5.4 the TLS_CLIENT will NOT negotiate TLS 1.2 where SSLv23 does so.
-            //               see https://bugs.php.net/bug.php?id=65329
-
+// TSM Feb 2016: changed crypto method from TLS_CLIENT to SSLv23_CLIENT  because iRODS4.1 expects at least TLS1.2
+//               in PHP 5.4 the TLS_CLIENT will NOT negotiate TLS 1.2 where SSLv23 does so.
+//               see https://bugs.php.net/bug.php?id=65329
+ 
             if (!stream_socket_enable_crypto($conn, true, STREAM_CRYPTO_METHOD_SSLv23_CLIENT)) {
                 throw new RODSException("Error turning on SSL on connection to server '$host:$port'.");
             }
 
             // all good ... do the PAM authentication over the encrypted connection
+
             // FIXME: '24', the TTL in hours, should be a configuration option.
-            $req_packet = new RP_pamAuthRequestInp($proxy_user, $pass, 24);
+            $req_packet = new RP_pamAuthRequestInp($user, $pass, 24);
 
             $msg = new RODSMessage("RODS_API_REQ_T", $req_packet, $GLOBALS['PRODS_API_NUMS']['PAM_AUTH_REQUEST_AN']);
             fwrite($conn, $msg->pack());
             $msg = new RODSMessage();
             $intInfo = $msg->unpack($conn);
             if ($intInfo < 0) {
-                throw new RODSException("PAM auth failed at server '$host:$port' User: $proxy_user Zone: $zone", $GLOBALS['PRODS_ERR_CODES_REV']["$intInfo"]);
+                throw new RODSException("PAM auth failed at server '$host:$port' User: $user Zone: $zone", $GLOBALS['PRODS_ERR_CODES_REV']["$intInfo"]);
             }
 
             // Update the account object with the temporary password
@@ -176,7 +175,7 @@ class RODSConn {
             $msg = new RODSMessage();
             $intInfo = $msg->unpack($conn);
             if ($intInfo < 0) {
-                throw new RODSException("Connection to '$host:$port' failed.ssl2. User: $proxy_user Zone: $zone", $GLOBALS['PRODS_ERR_CODES_REV']["$intInfo"]);
+                throw new RODSException("Connection to '$host:$port' failed.ssl2. User: $user Zone: $zone", $GLOBALS['PRODS_ERR_CODES_REV']["$intInfo"]);
             }
             // De-activate SSL on the connection
             stream_socket_enable_crypto($conn, false);
@@ -208,7 +207,7 @@ class RODSConn {
         $msg = new RODSMessage();
         $intInfo = $msg->unpack($conn);
         if ($intInfo < 0) {
-            throw new RODSException("Connection to '$host:$port' failed.3. User: $proxy_user Zone: $zone", $GLOBALS['PRODS_ERR_CODES_REV']["$intInfo"]);
+            throw new RODSException("Connection to '$host:$port' failed.3. User: $user Zone: $zone", $GLOBALS['PRODS_ERR_CODES_REV']["$intInfo"]);
         }
         $pack = $msg->getBody();
         $challenge_b64encoded = $pack->challenge;
@@ -225,7 +224,7 @@ class RODSConn {
         $response = base64_encode($pwmd5);
 
         // set response
-        $resp_packet = new RP_authResponseInp($response, $proxy_user);
+        $resp_packet = new RP_authResponseInp($response, $user);
         $msg = new RODSMessage("RODS_API_REQ_T", $resp_packet, $GLOBALS['PRODS_API_NUMS']['AUTH_RESPONSE_AN']);
         fwrite($conn, $msg->pack());
 
@@ -235,8 +234,7 @@ class RODSConn {
         $intInfo = $msg->unpack($conn);
         if ($intInfo < 0) {
             $this->disconnect();
-            $scrambledPass = preg_replace("|.|","*",$pass);
-            throw new RODSException("Connection to '$host:$port' failed.4 (login failed, possible wrong user/passwd). User: $proxy_user Pass: $scrambledPass Zone: $zone", $GLOBALS['PRODS_ERR_CODES_REV']["$intInfo"]);
+            throw new RODSException("Connection to '$host:$port' failed.4 (login failed, possible wrong user/passwd). User: $user Pass: $pass Zone: $zone", $GLOBALS['PRODS_ERR_CODES_REV']["$intInfo"]);
         }
 
         $this->connected = true;
@@ -331,7 +329,6 @@ class RODSConn {
     /**
      * Get a key for temp password from the server. this key can then be hashed together with real password to generate an temp password.
      * @return string key for temp password
-     * @throws \RODSException
      */
     public function getKeyForTempPassword() {
         if ($this->connected === false) {
@@ -346,38 +343,6 @@ class RODSConn {
             throw new RODSException("RODSConn::getKeyForTempPassword has got an error from the server", $GLOBALS['PRODS_ERR_CODES_REV']["$intInfo"]);
         }
         return ($msg->getBody()->stringToHashWith);
-    }
-
-    /**
-     * Return a temporary password for a specific user
-     *
-     * @param $user
-     * @return string key for temp password
-     * @throws \RODSException
-     */
-    public function getTempPasswordForUser($user) {
-        if ($this->connected === false) {
-            throw new RODSException("getTempPasswordForUser needs an active connection, but the connection is currently inactive", 'PERR_CONN_NOT_ACTIVE');
-        }
-        $user_pk = new RODSPacket("getTempPasswordForOtherInp_PI", ['targetUser' => $user, 'unused' => null]);
-        // API request ID: 724
-        $msg = new RODSMessage("RODS_API_REQ_T", $user_pk, $GLOBALS['PRODS_API_NUMS']['GET_TEMP_PASSWORD_FOR_OTHER_AN']);
-
-        // Send it
-        fwrite($this->conn, $msg->pack());
-
-        // Response
-        $msg = new RODSMessage();
-        $intInfo = (int) $msg->unpack($this->conn);
-        if ($intInfo < 0) {
-          throw new RODSException("RODSConn::getTempPasswordForUser has got an error from the server", $GLOBALS['PRODS_ERR_CODES_REV']["$intInfo"]);
-        }
-        $key = $msg->getBody()->stringToHashWith;
-
-        $auth_str = str_pad($key . $this->account->pass, 100, "\0");
-        $pwmd5 = bin2hex(md5($auth_str, true));
-
-        return $pwmd5;
     }
 
     /**
@@ -535,53 +500,17 @@ class RODSConn {
         }
     }
 
-
-    /**
-     * Returns the contents of a special object.
-     *
-     * Returns both files and collections
-     *
-     * @param $path
-     * @param int $total_num_rows
-     * @return RODSGenQueResults
-     * @throws RODSException
-     */
-    public function getSpecialContent($path, & $total_num_rows = -1) {
-        $src_pk = new RP_DataObjInp($path, 0, 0, 0, 0, 0, 0);
-
-        $msg = new RODSMessage("RODS_API_REQ_T", $src_pk, $GLOBALS['PRODS_API_NUMS']['QUERY_SPEC_COLL_AN']);
-        fwrite($this->conn, $msg->pack());
-
-        $response = new RODSMessage();
-        $intInfo = (int) $response->unpack($this->conn);
-
-        if ( $intInfo !== 0 ) {
-            throw new RODSException("RODSConn::getSpecialContent has got an error from the server", $GLOBALS['PRODS_ERR_CODES_REV'][$intInfo]);
-        }
-
-        $results = new RODSGenQueResults();
-        $result_pk = $response->getBody();
-
-        $results->addResults($result_pk);
-
-        return $results;
-    }
-
     /**
      * Get children direcotories, with basic stats,  of input direcotory path string
      * @param string $dir input direcotory path string
-     * @param array $orderby An associated array specifying how to sort the result by attributes. Each array key is the attribute, array val is 0 (assendent) or 1 (dessendent). The supported attributes are "name", "owner", "mtime".
-     * @param int $startingInx
-     * @param int $maxresults
-     * @param int $total_num_rows
-     * @return RODSDirStats[]
-     * @throws RODSException
+     * @param $orderby An associated array specifying how to sort the result by attributes. Each array key is the attribute, array val is 0 (assendent) or 1 (dessendent). The supported attributes are "name", "owner", "mtime".
+     * @return an array of RODSDirStats
      */
     public function getChildDirWithStats($dir, $orderby = array(), $startingInx = 0, $maxresults = 500, &$total_num_rows = -1) {
         // set selected value
         $select_val = array("COL_COLL_NAME", "COL_COLL_ID", "COL_COLL_OWNER_NAME",
             "COL_COLL_OWNER_ZONE", "COL_COLL_CREATE_TIME", "COL_COLL_MODIFY_TIME",
-            "COL_COLL_COMMENTS", "COL_COLL_TYPE", "COL_COLL_INFO1", "COL_COLL_INFO2");
+            "COL_COLL_COMMENTS");
         $select_attr = array();
 
         // set order by
@@ -620,16 +549,7 @@ class RODSConn {
             for ($i = 0; $i < count($que_result['COL_COLL_ID']); $i++) {
                 if ($que_result['COL_COLL_NAME'][$i] != "/") {
                     $ret_val[] = new RODSDirStats(
-                        basename($que_result['COL_COLL_NAME'][$i]),
-                        $que_result['COL_COLL_OWNER_NAME'][$i],
-                        $que_result['COL_COLL_OWNER_ZONE'][$i],
-                        $que_result['COL_COLL_MODIFY_TIME'][$i],
-                        $que_result['COL_COLL_CREATE_TIME'][$i],
-                        $que_result['COL_COLL_ID'][$i],
-                        $que_result['COL_COLL_COMMENTS'][$i],
-                        $que_result['COL_COLL_TYPE'][$i],
-                        $que_result['COL_COLL_INFO1'][$i],
-                        $que_result['COL_COLL_INFO2'][$i]
+                            basename($que_result['COL_COLL_NAME'][$i]), $que_result['COL_COLL_OWNER_NAME'][$i], $que_result['COL_COLL_OWNER_ZONE'][$i], $que_result['COL_COLL_MODIFY_TIME'][$i], $que_result['COL_COLL_CREATE_TIME'][$i], $que_result['COL_COLL_ID'][$i], $que_result['COL_COLL_COMMENTS'][$i]
                     );
                 }
             }
@@ -732,17 +652,7 @@ class RODSConn {
             return false;
 
         $stats = new RODSDirStats(
-            basename($que_result['COL_COLL_NAME'][0]),
-            $que_result['COL_COLL_OWNER_NAME'][0],
-            $que_result['COL_COLL_OWNER_ZONE'][0],
-            $que_result['COL_COLL_MODIFY_TIME'][0],
-            $que_result['COL_COLL_CREATE_TIME'][0],
-            $que_result['COL_COLL_ID'][0],
-            $que_result['COL_COLL_COMMENTS'][0],
-            $que_result['COL_COLL_TYPE'][0],
-            $que_result['COL_COLL_INFO1'][0],
-            $que_result['COL_COLL_INFO2'][0]
-
+                basename($que_result['COL_COLL_NAME'][0]), $que_result['COL_COLL_OWNER_NAME'][0], $que_result['COL_COLL_OWNER_ZONE'][0], $que_result['COL_COLL_MODIFY_TIME'][0], $que_result['COL_COLL_CREATE_TIME'][0], $que_result['COL_COLL_ID'][0], $que_result['COL_COLL_COMMENTS'][0]
         );
         return $stats;
     }
@@ -787,17 +697,12 @@ class RODSConn {
     }
 
     /**
-     * Check whether an object exists on iRODS server and is registered in iCAT under a specfic resource
-     *
-     * @param $filepath
-     * @param null $rescname
-     * @return bool
-     * @throws RODSException
+     * Check whether a file (in string) exists on RODS server.
+     * @return true/false
      */
-    public function objExists($filepath, $rescname = NULL) {
+    public function fileExists($filepath, $rescname = NULL) {
         $parent = dirname($filepath);
         $filename = basename($filepath);
-
         if (empty($rescname)) {
             $cond = array(new RODSQueryCondition("COL_COLL_NAME", $parent),
                 new RODSQueryCondition("COL_DATA_NAME", $filename));
@@ -813,47 +718,6 @@ class RODSConn {
             return false;
         else
             return true;
-    }
-
-    /**
-     * Check whether a file exists on iRODS server.
-     *
-     * @param $filePath
-     * @param null $rescName
-     * @return bool
-     * @throws RODSException
-     */
-    public function fileExists($filePath, $rescName = NULL) {
-        $src_pk = new RP_DataObjInp($filePath, 0, 0, 0, 0, 0, 0);
-
-        $msg = new RODSMessage("RODS_API_REQ_T", $src_pk, $GLOBALS['PRODS_API_NUMS']['OBJ_STAT_AN']);
-        fwrite($this->conn, $msg->pack());
-
-        $response = new RODSMessage();
-        $intInfo = (int) $response->unpack($this->conn);
-
-        switch($intInfo) {
-            case 1:
-
-                if ( !empty($rescName) ) {
-                    // We are also checking whether the file exists on a specific resource
-                    // This requires a genQuery to check whether the object exists.
-                    return $this->objExists($filePath, $rescName);
-                }
-
-                return true;
-            break;
-
-            // I'm not sure when either of these two cases occurs
-            case 0:
-            case $GLOBALS['PRODS_ERR_CODES']['USER_FILE_DOES_NOT_EXIST']:
-                return false;
-            break;
-
-            default:
-                throw new RODSException("RODSConn::stat has got an error from the server", $GLOBALS['PRODS_ERR_CODES_REV'][$intInfo]);
-        }
-
     }
 
     /**
@@ -961,13 +825,12 @@ class RODSConn {
      *   'a+'    Open for reading and writing; place the file pointer at the end of the file. If the file does not exist, attempt to create it.
      *   'x'    Create and open for writing only; place the file pointer at the beginning of the file. If the file already exists, the fopen() call will fail by returning FALSE and generating an error of level E_WARNING. If the file does not exist, attempt to create it. This is equivalent to specifying O_EXCL|O_CREAT flags for the underlying open(2) system call.
      *   'x+'    Create and open for reading and writing; place the file pointer at the beginning of the file. If the file already exists, the fopen() call will fail by returning FALSE and generating an error of level E_WARNING. If the file does not exist, attempt to create it. This is equivalent to specifying O_EXCL|O_CREAT flags for the underlying open(2) system call.
-     * @param int $position updated position
-     * @param string $rescname . Note that this parameter is required only if the file does not exists (create mode). If the file already exists, and if file resource is unknown or unique or you-dont-care for that file, leave the field, or pass NULL.
-     * @param boolean $assum_file_exists . This parameter specifies whether file exists. If the value is false, this mothod will check with RODS server to make sure. If value is true, the check will NOT be done. Default value is false.
-     * @param string $filetype . This parameter only make sense when you want to specify the file type, if file does not exists (create mode). If not specified, it defaults to "generic"
-     * @param integer $cmode . This parameter is only used for "createmode". It specifies the file mode on physical storage system (RODS vault), in octal 4 digit format. For instance, 0644 is owner readable/writeable, and nothing else. 0777 is all readable, writable, and excutable. If not specified, and the open flag requirs create mode, it defaults to 0644.
-     * @return int level 1 descriptor
-     * @throws RODSException
+     * @param postion updated position
+     * @param string $rescname. Note that this parameter is required only if the file does not exists (create mode). If the file already exists, and if file resource is unknown or unique or you-dont-care for that file, leave the field, or pass NULL.
+     * @param boolean $assum_file_exists. This parameter specifies whether file exists. If the value is false, this mothod will check with RODS server to make sure. If value is true, the check will NOT be done. Default value is false.
+     * @param string $filetype. This parameter only make sense when you want to specify the file type, if file does not exists (create mode). If not specified, it defaults to "generic"
+     * @param integer $cmode. This parameter is only used for "createmode". It specifies the file mode on physical storage system (RODS vault), in octal 4 digit format. For instance, 0644 is owner readable/writeable, and nothing else. 0777 is all readable, writable, and excutable. If not specified, and the open flag requirs create mode, it defaults to 0644.
+     * @return integer level 1 descriptor
      */
     public function openFileDesc($path, $mode, &$position, $rescname = NULL, $assum_file_exists = false, $filetype = 'generic', $cmode = 0644) {
         $create_if_not_exists = false;
@@ -1014,32 +877,24 @@ class RODSConn {
                 throw new RODSException("RODSConn::openFileDesc() does not recognize input mode:'$mode' ", "PERR_USER_INPUT_ERROR");
         }
 
-        if ($assum_file_exists == true) {
+        if ($assum_file_exists === true)
             $file_exists = true;
-        } else {
+        else
             $file_exists = $this->fileExists($path, $rescname);
-        }
 
         if (($error_if_exists) && ($file_exists === true)) {
             throw new RODSException("RODSConn::openFileDesc() expect file '$path' dose not exists with mode '$mode', but the file does exists", "PERR_USER_INPUT_ERROR");
         }
 
-        if (($create_if_not_exists) && ($file_exists === false)) {
 
-            // Create new file
-            if ( !empty($rescname)) {
-                $keyValPair_pk = new RP_KeyValPair(2, array("rescName", "dataType"), array($rescname, $filetype));
-            } else {
-                $keyValPair_pk = new RP_KeyValPair(1, array("dataType"), array($filetype));
-            }
+        if (($create_if_not_exists) && ($file_exists === false)) { // create new file
+            $keyValPair_pk = new RP_KeyValPair(2, array("rescName", "dataType"), array("$rescname", "$filetype"));
             $dataObjInp_pk = new RP_DataObjInp($path, $cmode, $open_flag, 0, -1, 0, 0, $keyValPair_pk);
             $api_num = $GLOBALS['PRODS_API_NUMS']['DATA_OBJ_CREATE_AN'];
-
-        } else {
-            // open existing file
+        } else { // open existing file
             // open the file and get descriptor
             if (isset($rescname)) {
-                $keyValPair_pk = new RP_KeyValPair(1, array("rescName"), array($rescname));
+                $keyValPair_pk = new RP_KeyValPair(1, array("rescName"), array("$rescname"));
                 $dataObjInp_pk = new RP_DataObjInp
                         ($path, 0, $open_flag, 0, -1, 0, 0, $keyValPair_pk);
             } else {
@@ -1050,18 +905,17 @@ class RODSConn {
         }
 
         $msg = new RODSMessage("RODS_API_REQ_T", $dataObjInp_pk, $api_num);
-        fwrite($this->conn, $msg->pack());
-
-        $response = new RODSMessage();
-        $intInfo = (int) $response->unpack($this->conn);
+        fwrite($this->conn, $msg->pack()); // send it
+        // get value back
+        $msg = new RODSMessage();
+        $intInfo = (int) $msg->unpack($this->conn);
         if ($intInfo < 0) {
             if (RODSException::rodsErrCodeToAbbr($intInfo) == 'CAT_NO_ROWS_FOUND') {
                 throw new RODSException("trying to open a file '$path' " .
                 "which does not exists with mode '$mode' ", "PERR_USER_INPUT_ERROR");
             }
-            throw new RODSException("RODSConn::openFileDesc has got an error from the server", $GLOBALS['PRODS_ERR_CODES_REV'][$intInfo]);
+            throw new RODSException("RODSConn::openFileDesc has got an error from the server", $GLOBALS['PRODS_ERR_CODES_REV']["$intInfo"]);
         }
-
         $l1desc = $intInfo;
 
         if ($seek_to_end_of_file === true) {
@@ -1141,9 +995,9 @@ class RODSConn {
      * @return the read string.
      */
     public function fileRead($l1desc, $length) {
-
+       
         $openedDataObjInp = new RP_OpenedDataObjInp($l1desc, $length);
-        $msg = new RODSMessage("RODS_API_REQ_T", $openedDataObjInp, $GLOBALS['PRODS_API_NUMS']['OPENED_DATA_OBJ_READ_AN']);
+        $msg = new RODSMessage("RODS_API_REQ_T", $openedDataObjInp, $GLOBALS['PRODS_API_NUMS']['OPENED_DATA_OBJ_READ_AN'], $string);
 
         fwrite($this->conn, $msg->pack()); // send it
         $msg = new RODSMessage();
@@ -1192,10 +1046,10 @@ class RODSConn {
     public function fileSeek($l1desc, $offset, $whence = SEEK_SET) {
       //  $dataObjReadInp_pk = new RP_fileLseekInp($l1desc, $offset, $whence);
        // $msg = new RODSMessage("RODS_API_REQ_T", $dataObjReadInp_pk, $GLOBALS['PRODS_API_NUMS']['DATA_OBJ_LSEEK_AN']);
-
-
+        
+        
         $openedDataObjInp = new RP_OpenedDataObjInp($l1desc, 0, $offset, $whence);
-        $msg = new RODSMessage("RODS_API_REQ_T", $openedDataObjInp, $GLOBALS['PRODS_API_NUMS']['OPENED_DATA_OBJ_SEEK_AN']);
+        $msg = new RODSMessage("RODS_API_REQ_T", $openedDataObjInp, $GLOBALS['PRODS_API_NUMS']['OPENED_DATA_OBJ_SEEK_AN'], $string);
 
         fwrite($this->conn, $msg->pack()); // send it
         $msg = new RODSMessage();
@@ -1337,10 +1191,10 @@ class RODSConn {
      *    - 'port' remote port
      *    - 'zone' remote zone
      *    if any of the value is empty, this option will be ignored.
-     * @param RODSKeyValPair $options an RODSKeyValPair specifying additional options, purpose of this is unknown at the developement time. Leave it alone if you are as clueless as me...
+     * @param array $options an array specifying additional options, purpose of this is unknown at the developement time. Leave it alone if you are as clueless as me...
      * @return an associative array. Each array key is the lable, and each array value's type will depend on the type of $out_param, at this moment, only string and RODSKeyValPair are supported
      */
-    public function execUserRule($rule_body, array $inp_params = array(), array $out_params = array(), array $remotesvr = array(), RODSKeyValPair $options = null) {
+    public function execUserRule($rule_body, array $inp_params = array(), array $out_params = array(), array $remotesvr = array(), array $options = array()) {
         $inp_params_packets = array();
         foreach ($inp_params as $inp_param_key => $inp_param_val) {
             if (is_a($inp_param_val, 'RODSKeyValPair')) {
@@ -1361,10 +1215,7 @@ class RODSConn {
             $remotesvr_packet = new RP_RHostAddr();
         }
 
-        if (!isset($options))
-            $options = new RODSKeyValPair();
-
-        $options_packet = $options->makePacket();
+        $options_packet = (new RODSKeyValPair($options))->makePacket();
 
         $pkt = new RP_ExecMyRuleInp($rule_body, $remotesvr_packet, $options_packet, $out_params_desc, $inp_param_arr_packet);
         $msg = new RODSMessage("RODS_API_REQ_T", $pkt, $GLOBALS['PRODS_API_NUMS']['EXEC_MY_RULE_AN']);
@@ -1381,10 +1232,6 @@ class RODSConn {
             if ($param->type == 'STR_PI') {
                 $label = $param->label;
                 $ret_arr["$label"] = $param->STR_PI->myStr;
-            } else
-            if ($param->type == 'INT_PI') {
-                $label = $param->label;
-                $ret_arr["$label"] = $param->INT_PI->myStr;
             } else
             if ($param->type == 'KeyValPair_PI') {
                 $label = $param->label;
